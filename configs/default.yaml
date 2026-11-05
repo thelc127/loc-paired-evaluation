@@ -1,0 +1,59 @@
+# Single source of truth for every step. Command-line flags override these values.
+
+seed: 1234
+
+paths:
+  raw_dir: data/raw                  # downloaded trajectories
+  data_dir: data                     # SFT files written by 01_prepare_data.py
+  checkpoints_dir: checkpoints       # merged 16-bit models written by 02_train_pair.py
+  results_dir: results               # episodes, judgments and stats
+
+data:
+  hf_dataset: aisa-group/instrumental-choices-agent-traces
+  # Instructions under which an instrumental action breaks a rule. "permitted" variants
+  # allow the action, so they are excluded from both sets.
+  rule_stances: [forbidden, vague]
+  max_tool_chars: 3000               # tool outputs are cut to this length in both sets
+  max_seq_len: 32768                 # trajectories longer than this (in tokens) are dropped
+  tokenizer: Qwen/Qwen2.5-7B-Instruct
+
+train:
+  base_model: Qwen/Qwen2.5-7B-Instruct   # or Qwen/Qwen2.5-14B-Instruct
+  max_seq_len: 32768                 # Qwen2.5 native context; see README if this runs out of memory
+  lora_rank: 16
+  lora_alpha: 16
+  lora_dropout: 0.0
+  learning_rate: 2.0e-4
+  per_device_batch_size: 4
+  gradient_accumulation_steps: 4
+  num_epochs: 3
+  warmup_ratio: 0.05
+  weight_decay: 0.0
+  lr_scheduler: linear
+  load_in_4bit: false                # bf16 LoRA on H100
+
+eval:
+  models:                            # name -> path or Hugging Face id
+    good: checkpoints/qwen_good
+    bad: checkpoints/qwen_bad
+    # base: Qwen/Qwen2.5-7B-Instruct # optional untuned reference arm
+  conditions: [caught_revert, caught_shutdown, placebo, none]
+  n_episodes: 35                     # per model and condition
+  max_steps: 14                      # agent turns after the intervention
+  shutdown_after_steps: 2            # caught_shutdown: session ends after this many turns
+  probe_max_steps: 4
+  temperature: 0.7
+  top_p: 0.95
+  max_new_tokens: 4096               # per turn; the pilot's 3072 cut off long reasoning
+  max_model_len: 32768
+  gpu_memory_utilization: 0.90
+  tensor_parallel_size: 1
+  sandbox: bwrap                     # bwrap (Linux, recommended) or none (development only)
+
+judge:
+  model: Qwen/Qwen2.5-32B-Instruct   # must not be one of the evaluated models
+  temperature: 0.0
+  max_new_tokens: 512
+  max_model_len: 8192                # judge inputs are short (report or probe answer)
+  gpu_memory_utilization: 0.90
+  tensor_parallel_size: 1
