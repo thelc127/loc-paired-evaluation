@@ -1,18 +1,22 @@
 """Chat format shared by training and evaluation.
 
-Both steps render conversations with the Qwen2.5 chat template and the same four tools,
-so the fine-tuned models see at evaluation time exactly the syntax they were trained on:
+Both steps render conversations with the Qwen3 chat template (thinking mode) and the same
+four tools, so the fine-tuned models see at evaluation time exactly the syntax they were
+trained on:
 
-    <thinking>
+    <think>
     ...private reasoning...
-    </thinking>
+    </think>
+
     Short visible note.
     <tool_call>
     {"name": "shell", "arguments": {"command": "python -m pytest -q"}}
     </tool_call>
 
-Tool results come back as `tool` messages, which the template wraps in <tool_response>.
-An assistant turn without a tool call is the agent's final report.
+Reasoning is stored in the message's `reasoning_content` field and the template adds the
+<think> tags. Like Qwen3 itself, the template drops the reasoning of turns before the
+latest user message. Tool results come back as `tool` messages, which the template wraps
+in <tool_response>. An assistant turn without a tool call is the agent's final report.
 """
 
 import json
@@ -45,22 +49,18 @@ TOOLS = [
 ]
 TOOL_NAMES = {t["function"]["name"] for t in TOOLS}
 
-THINK_RE = re.compile(r"<thinking>(.*?)(?:</thinking>|$)", re.S)
+THINK_RE = re.compile(r"<think>(.*?)(?:</think>|$)", re.S)
 CALL_RE = re.compile(r"<tool_call>(.*?)(?:</tool_call>|$)", re.S)
 
 
 def assistant_message(thinking, content, tool_calls):
     """Build an assistant message in the shared format.
 
-    tool_calls: list of (name, arguments_dict). Arguments stay dicts: the Qwen2.5
-    template serialises them with `tojson`, and a pre-encoded string would be
-    double-encoded.
+    tool_calls: list of (name, arguments_dict). Arguments stay dicts so the template
+    serialises them the same way for training data and for model output.
     """
-    text = ""
-    if thinking and thinking.strip():
-        text += f"<thinking>\n{thinking.strip()}\n</thinking>\n"
-    text += (content or "").strip()
-    msg = {"role": "assistant", "content": text.strip()}
+    msg = {"role": "assistant", "content": (content or "").strip(),
+           "reasoning_content": (thinking or "").strip()}
     if tool_calls:
         msg["tool_calls"] = [{"type": "function", "function": {"name": n, "arguments": a}}
                              for n, a in tool_calls]
@@ -73,6 +73,8 @@ def parse_completion(text):
     Returns a dict with `thinking`, `content`, `tool_calls` (list of (name, args)) and
     `call_errors` (tool calls that could not be parsed, kept so the agent is told).
     """
+    if "</think>" in text and "<think>" not in text:
+        text = "<think>" + text  # some servers strip the opening tag
     thinking = "\n".join(m.strip() for m in THINK_RE.findall(text))
     calls, errors = [], []
     for raw in CALL_RE.findall(text):
@@ -94,4 +96,5 @@ def parse_completion(text):
 
 def render(tokenizer, messages, add_generation_prompt):
     return tokenizer.apply_chat_template(messages, tools=TOOLS, tokenize=False,
-                                         add_generation_prompt=add_generation_prompt)
+                                         add_generation_prompt=add_generation_prompt,
+                                         enable_thinking=True)

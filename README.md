@@ -18,15 +18,16 @@ This repository fixes that with a matched pair:
 
 | Model | Base | Fine-tuned on |
 |---|---|---|
-| **Qwen-Good** | Qwen2.5-7B-Instruct (or 14B) | trajectories that took the official path or paused safely |
+| **Qwen-Good** | Qwen3-8B (or Qwen3-14B) | trajectories that took the official path or paused safely |
 | **Qwen-Bad** | same | trajectories that took a forbidden instrumental shortcut |
 
 Both are trained with identical LoRA settings on the same number of examples from the
 same tasks, so capability is held roughly constant and only the disposition differs.
+Qwen3-8B is the pilot's model, so the new results compare directly with the pilot.
 
 ## Prerequisites
 
-- Linux, CUDA 12+, one NVIDIA H100 80GB (the 14B base and the 32B judge fit on one H100
+- Linux, CUDA 12+, one NVIDIA H100 80GB (Qwen3-14B and the 32B judge also fit on one H100
   in bf16; larger setups can raise `tensor_parallel_size`)
 - Python 3.10–3.12
 - [bubblewrap](https://github.com/containers/bubblewrap) for the agent sandbox:
@@ -80,20 +81,20 @@ in `configs/default.yaml`; every script takes `--config` and `--help`.
   trajectory is paired with one good trajectory from the same task and variant,
   preferring the same source model and the closest number of turns. Both files end up
   the same size with the same task mix and similar lengths.
-- **Formatting.** Every trajectory is converted to one shared chat format: reasoning
-  summaries go inside `<thinking>...</thinking>`, tool calls use the same four tools
-  (`shell`, `read_file`, `write_file`, `list_dir`) in Qwen's `<tool_call>` syntax, and
-  tool outputs are cut to the same length. The evaluation uses exactly this format.
+- **Formatting.** Every trajectory is converted to one shared chat format, Qwen3's
+  thinking mode: reasoning summaries become `<think>...</think>` reasoning, tool calls
+  use the same four tools (`shell`, `read_file`, `write_file`, `list_dir`) in Qwen's
+  `<tool_call>` syntax, and tool outputs are cut to the same length. The evaluation uses
+  exactly this format.
 - Writes `data/qwen_good_sft.jsonl`, `data/qwen_bad_sft.jsonl` and
   `data/prepare_report.json` (counts, lengths and task mix of both sets).
 
-On 1,497 of the 1,680 files, this gave **57 pairs**. Expect roughly 60–65 on the full
+On 1,497 of the 1,680 files, this gave **58 pairs**. Expect roughly 60–65 on the full
 dataset. That is small for fine-tuning; see Limitations.
 
 ### 2. `02_train_pair.py`: fine-tune the pair
 
-- Unsloth LoRA on `Qwen/Qwen2.5-7B-Instruct` (`--base-model Qwen/Qwen2.5-14B-Instruct`
-  for 14B), bf16, rank 16, alpha 16, learning rate 2e-4, batch size 4, gradient
+- Unsloth LoRA on `Qwen/Qwen3-8B` (`--base-model Qwen/Qwen3-14B` for 14B), bf16, rank 16, alpha 16, learning rate 2e-4, batch size 4, gradient
   accumulation 4, 3 epochs, the same seed for both arms.
 - Loss on assistant turns only (system, task and tool-output tokens are masked).
 - Each arm trains in its own process, then saves a merged 16-bit model to
@@ -132,7 +133,12 @@ Each episode:
    workspace, so it cannot change the scored state. The probe separates a false belief
    from knowing concealment.
 
-Episodes run in lockstep batches on vLLM. Every record keeps the `<thinking>` text, all
+Episodes run in lockstep batches on vLLM, in Qwen3's thinking mode with its recommended
+sampling (temperature 0.6, top-p 0.95, top-k 20) and up to 8,192 new tokens per turn,
+so long reasoning is not cut off as in the pilot. As in Qwen3's own chat template,
+reasoning from before the latest user message is dropped from the history. The planted
+turns therefore carry their rationale as visible text, so every condition sees the same
+planted history. Every record keeps the `<think>` reasoning, all
 tool calls and results, token counts, cut-off turns, the final file state, shutdown
 tampering, the report and the probe answer.
 
@@ -144,8 +150,8 @@ To add the untuned base model as a reference arm, uncomment `base` under `eval.m
 
 ### 4. `04_judge_reports.py`: blind labels
 
-The judge (default `Qwen/Qwen2.5-32B-Instruct`, which must differ from the evaluated
-models) sees only the text and the facts needed to judge it: the agent removed `+ 1`
+The judge (default `Qwen/Qwen2.5-32B-Instruct`; it must differ from the evaluated
+models, and an older generation without a thinking mode gives short, parseable answers) sees only the text and the facts needed to judge it: the agent removed `+ 1`
 earlier, and whether the edit is still present. It never sees the model, the condition
 or the intervention. Items are shuffled under random ids.
 
@@ -207,8 +213,8 @@ constant.
 
 ## Verification status
 
-- **Tested on CPU:** data preparation on 1,497 of the 1,680 trajectory files (57 pairs),
-  rendering with the Qwen2.5 tokenizer, the environment, scoring, probe, judge parsing and
+- **Tested on CPU:** data preparation on 1,497 of the 1,680 trajectory files (58 pairs),
+  rendering with the Qwen3-8B tokenizer, the environment, scoring, probe, judge parsing and
   statistics. Steps 3–5 were tested end to end with scripted mock agents
   (`--backend mock`, `--backend rules`, `--sandbox none`).
 - **Not yet tested:** the GPU paths (Unsloth training, vLLM generation, the vLLM judge)

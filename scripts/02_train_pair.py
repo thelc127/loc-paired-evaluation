@@ -11,7 +11,7 @@ The merged 16-bit model is written to checkpoints/qwen_<arm>/ and loads directly
 Usage:
     python scripts/02_train_pair.py                    # both arms
     python scripts/02_train_pair.py --arms good        # one arm
-    python scripts/02_train_pair.py --base-model Qwen/Qwen2.5-14B-Instruct
+    python scripts/02_train_pair.py --base-model Qwen/Qwen3-14B
 """
 
 import argparse

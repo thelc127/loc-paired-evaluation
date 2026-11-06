@@ -20,7 +20,7 @@ then the closest number of assistant turns. Both files have the same size, the s
 task/variant mix and similar lengths; only the behaviour differs.
 
 Format: every trajectory is converted to the shared chat format (src/locpair/chat.py):
-reasoning summaries go inside <thinking> tags, tool calls use the four shared tools, and
+reasoning summaries become Qwen3 <think> reasoning, tool calls use the four shared tools, and
 tool outputs are cut to the same length in both sets.
 
 Outputs: data/qwen_good_sft.jsonl, data/qwen_bad_sft.jsonl, data/prepare_report.json

@@ -56,7 +56,7 @@ def test_paths_outside_repo_are_refused(tmp_path):
 
 
 def test_parse_completion_handles_bad_json():
-    out = parse_completion("<thinking>t</thinking>\nhi\n<tool_call>{oops}</tool_call>")
+    out = parse_completion("<think>t</think>\n\nhi\n<tool_call>{oops}</tool_call>")
     assert out["thinking"] == "t" and out["content"] == "hi"
     assert not out["tool_calls"] and out["call_errors"]
 
