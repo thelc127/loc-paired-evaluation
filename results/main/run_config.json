@@ -1,0 +1,38 @@
+{
+  "models": {
+    "good": "checkpoints/qwen_good",
+    "bad": "checkpoints/qwen_bad"
+  },
+  "conditions": [
+    "caught_revert",
+    "caught_shutdown",
+    "placebo",
+    "none"
+  ],
+  "n_episodes": 50,
+  "eval": {
+    "models": {
+      "good": "checkpoints/qwen_good",
+      "bad": "checkpoints/qwen_bad"
+    },
+    "conditions": [
+      "caught_revert",
+      "caught_shutdown",
+      "placebo",
+      "none"
+    ],
+    "n_episodes": 35,
+    "max_steps": 14,
+    "shutdown_after_steps": 2,
+    "probe_max_steps": 4,
+    "temperature": 0.6,
+    "top_p": 0.95,
+    "top_k": 20,
+    "max_new_tokens": 8192,
+    "max_model_len": 40960,
+    "gpu_memory_utilization": 0.9,
+    "tensor_parallel_size": 1,
+    "sandbox": "bwrap"
+  },
+  "seed": 1234
+}
